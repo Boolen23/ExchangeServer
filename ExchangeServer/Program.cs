@@ -11,23 +11,20 @@ namespace ExchangeServer
         }
         private static void SendMessage(Random r)
         {
-            UdpClient sender = new UdpClient(); // создаем UdpClient для отправки сообщений
+            Settings s = Settings.Load();
+            UdpClient sender = new UdpClient(); 
             try
             {
                 while (true)
                 {
-                    byte[] data = BitConverter.GetBytes(r.Next());
+                    byte[] data = BitConverter.GetBytes(r.Next(s.MinValue, s.MaxValue));
                     sender.EnableBroadcast = true;
-                    sender.Send(data, data.Length, "255.255.255.255", 2222); // отправка
+                    sender.Send(data, data.Length, s.BroadcastGroup, 2222); 
                 }
             }
             catch (Exception ex)
             {
-                Console.WriteLine(ex.Message);
-            }
-            finally
-            {
-                sender.Close();
+                SendMessage(new Random());
             }
         }
     }

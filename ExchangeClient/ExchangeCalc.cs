@@ -12,51 +12,49 @@ namespace ExchangeClient
         public ExchangeCalc()
         {
             RecivedData = new ConcurrentBag<int>();
+            ValuesCount = new ConcurrentDictionary<int, uint>();
             BadCount = 0;
             GoCalcAsync();
         }
-        //public override string ToString() => $"Total packets: {HandledData.Count}, MissingPackets: {BadCount},  avg: {HandledData.avg}, dev: {HandledData.StdDev}, mod: {HandledData.Mod}, median: {HandledData.Median}";
-        public override string ToString() => $"Total packets: {TotalCount}, Missing:{BadCount}, avg: {Average}, mod: {Mod}, median: {Median(ValuesCount.Select(i=>i.value))}";
-
+        public override string ToString() => $"Total packets: {TotalCount}, Missing: {BadCount}, avg: {Average}, dev: {CalculateStdDev(ValuesCount.Keys)}, mod: {Mod}, median: {Median(ValuesCount.Keys)}";
+        private ConcurrentDictionary<int, uint> ValuesCount;
         private ConcurrentBag<int> RecivedData;
-        private (int Count, double avg, double StdDev, int Mod, double Median) HandledData;
+
         private double Average = -1;
-        private long TotalCount = 0;
-        private List<(int value, int Count)> ValuesCount;
-        private long BadCount;
+        private ulong TotalCount = 0;
+        private ulong BadCount;     
+        private int Mod => ValuesCount.Count() > 0 ? ValuesCount.Aggregate((x, y) => x.Value > y.Value ? x : y).Key : 0;
+
         private async void GoCalcAsync()
         {
             await Task.Run(() =>
             {
                 while (true)
                 {
-                    if (RecivedData.Count <10 ) continue;
-                    CalcAverageData();
-                    //HandledData = (RecivedData.Count, RecivedData.Average(), CalculateStdDev(RecivedData), Mod(RecivedData), Median(RecivedData));
+                    try
+                    {
+                        if (RecivedData.Count < 1) continue;
+
+                        List<int> tmp = new List<int>(RecivedData);
+                        RecivedData.Clear();
+                        if (Average == -1) Average = tmp.First();
+                        for (int i = 0; i < tmp.Count; i++)
+                        {
+                            TotalCount++;
+                            double diff = tmp[i] - Average;
+                            Average += diff / TotalCount;
+
+                            if (ValuesCount.ContainsKey(tmp[i]))
+                                ValuesCount.TryUpdate(tmp[i], ValuesCount[tmp[i]]++, ValuesCount[tmp[i]]++);
+                            else ValuesCount.TryAdd(tmp[i], 1);
+                        }
+                    }
+                    catch(Exception ex)
+                    {
+                        Console.WriteLine(ex.Message);
+                    }
                 }
             });
-        }
-        private int Mod => ValuesCount is null ? 0 : ValuesCount.OrderByDescending(x => x.Count).FirstOrDefault().value;
-        private void CalcAverageData()
-        {
-            List<int> tmp = new List<int>(RecivedData);
-            RecivedData.Clear();
-            if (Average == -1) Average = tmp.First();
-            
-            for (int i = 0; i < tmp.Count - 1; i++)
-            {
-                TotalCount++;
-                double diff = tmp[i + 1] - Average;
-                Average += diff / TotalCount;
-            }
-            if(ValuesCount is null) 
-                ValuesCount = tmp.GroupBy(x => x).Select(x => (value: x.Key, Count: x.Count())).ToList();
-            else
-            {
-                var ConcateGroup = tmp.GroupBy(x => x).Select(x => (value: x.Key, Count: x.Count())).Concat(ValuesCount).ToList();
-                ValuesCount = ConcateGroup.GroupBy(x => x.value).Select(x => (value: x.Key, Count: x.Sum(x => x.Count))).ToList();
-            }
-
         }
         public void AddBad() => BadCount++;
         public void AddData(int data) => RecivedData.Add(data);
@@ -73,6 +71,7 @@ namespace ExchangeClient
         }
         private double Median(IEnumerable<int> values)
         {
+            if (values is null) return 0;
             int[] temp = values.ToArray();
             if (temp.Length == 0) return -1;
             Array.Sort(temp);

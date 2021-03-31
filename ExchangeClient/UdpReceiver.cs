@@ -13,18 +13,22 @@ namespace ExchangeClient
         private UdpClient receiver;
         public UdpReceiver(ExchangeCalc exc)
         {
-            receiver = new UdpClient();
             calc = exc;
+            Init();
+        }
+        private void Init()
+        {
+            receiver = new UdpClient();
             ReceiveAsync();
         }
         private ExchangeCalc calc;
         private async void ReceiveAsync()
         {
-            await Task.Run(() =>
+            await Task.Run(async() =>
             {
-
+                Settings s = Settings.Load();
                 UdpClient receiver = new UdpClient(2222); // UdpClient для получения данных
-                receiver.JoinMulticastGroup(IPAddress.Parse("235.5.5.11"), 20);
+                receiver.JoinMulticastGroup(IPAddress.Parse(s.BroadcastGroup), 20);
                 IPEndPoint ep = null;
                 try
                 {
@@ -35,17 +39,15 @@ namespace ExchangeClient
                         {
                             calc.AddBad();
                             Ticks = DateTime.Now.Ticks;
+                            continue;
                         }
                         calc.AddData(BitConverter.ToInt32(receiver.Receive(ref ep)));
+                        await Task.Delay(s.ReciveDelayMs);
                     }
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine(ex.Message);
-                }
-                finally
-                {
-                    receiver.Close();
+                    Init();
                 }
             });
         }
