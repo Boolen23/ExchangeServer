@@ -16,7 +16,7 @@ namespace ExchangeServer
             {
                 while (true)
                 {
-                    byte[] data = BitConverter.GetBytes(r.Next(10, 20));
+                    byte[] data = BitConverter.GetBytes(r.Next());
                     sender.EnableBroadcast = true;
                     sender.Send(data, data.Length, "255.255.255.255", 2222); // отправка
                 }
