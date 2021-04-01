@@ -27,7 +27,7 @@ namespace ExchangeClient
             await Task.Run(async() =>
             {
                 Settings s = Settings.Load();
-                UdpClient receiver = new UdpClient(2222); // UdpClient для получения данных
+                UdpClient receiver = new UdpClient(2222); 
                 receiver.JoinMulticastGroup(IPAddress.Parse(s.BroadcastGroup), 20);
                 IPEndPoint ep = null;
                 try

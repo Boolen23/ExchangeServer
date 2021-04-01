@@ -13,18 +13,23 @@ namespace ExchangeClient
         {
             RecivedData = new ConcurrentBag<int>();
             ValuesCount = new ConcurrentDictionary<int, uint>();
-            BadCount = 0;
             GoCalcAsync();
         }
-        public override string ToString() => $"Total packets: {TotalCount}, Missing: {BadCount}, avg: {Average}, dev: {CalculateStdDev(ValuesCount.Keys)}, mod: {Mod}, median: {Median(ValuesCount.Keys)}";
+        public override string ToString() => $"Total packets: {TotalCount}, Missing: {BadCount}, avg: {Average}, dev: {StDev}, mod: {Mod}, median: {Median(ValuesCount.Keys)}";
         private ConcurrentDictionary<int, uint> ValuesCount;
         private ConcurrentBag<int> RecivedData;
 
-        private double Average = -1;
-        private ulong TotalCount = 0;
-        private ulong BadCount;     
+        #region ResultProperties
+        private double Average { get; set; } = -1;
+        private ulong TotalCount { get; set; } = 0;
+        private ulong BadCount { get; set; } = 0;
+        public double StDev => Math.Sqrt(_stDevSum / (TotalCount - 1));
         private int Mod => ValuesCount.Count() > 0 ? ValuesCount.Aggregate((x, y) => x.Value > y.Value ? x : y).Key : 0;
+        #endregion
 
+        #region Calculations
+        private double _stDevMean = 0;
+        private double _stDevSum = 0;
         private async void GoCalcAsync()
         {
             await Task.Run(() =>
@@ -41,12 +46,19 @@ namespace ExchangeClient
                         for (int i = 0; i < tmp.Count; i++)
                         {
                             TotalCount++;
+                            //рассчет среднего
                             double diff = tmp[i] - Average;
                             Average += diff / TotalCount;
 
+                            //составление таблицы вхождений
                             if (ValuesCount.ContainsKey(tmp[i]))
                                 ValuesCount.TryUpdate(tmp[i], ValuesCount[tmp[i]]++, ValuesCount[tmp[i]]++);
                             else ValuesCount.TryAdd(tmp[i], 1);
+
+                            //рассчет среднеквадратичного отклонения
+                            double delta = tmp[i] - _stDevMean;
+                            _stDevMean += delta / TotalCount;
+                            _stDevSum += delta * (tmp[i] - _stDevMean);
                         }
                     }
                     catch(Exception ex)
@@ -56,19 +68,11 @@ namespace ExchangeClient
                 }
             });
         }
+        #endregion
+
+        #region Methods
         public void AddBad() => BadCount++;
         public void AddData(int data) => RecivedData.Add(data);
-        private double CalculateStdDev(IEnumerable<int> values)
-        {
-            double ret = 0;
-            if (values.Count() > 0)
-            {
-                double avg = values.Average();
-                double sum = values.Sum(d => Math.Pow(d - avg, 2));
-                ret = Math.Sqrt((sum) / (values.Count() - 1));
-            }
-            return ret;
-        }
         private double Median(IEnumerable<int> values)
         {
             if (values is null) return 0;
@@ -84,6 +88,6 @@ namespace ExchangeClient
             }
             else return temp[count / 2];
         }
-
+        #endregion
     }
 }
